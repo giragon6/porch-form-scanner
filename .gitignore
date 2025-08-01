@@ -1,1 +1,4 @@
 .venv
+.ref
+**/result.png
+__pycache__
