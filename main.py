@@ -6,6 +6,9 @@ import io
 from PIL import Image
 import torchvision.transforms as T
 import gc
+from matplotlib import pyplot as plt
+import pytesseract
+import base64
 
 def image_preprocess_transforms(mean=(0.4611, 0.4359, 0.3905), std=(0.2193, 0.2150, 0.2109)):
     return T.Compose([
@@ -60,25 +63,52 @@ def scan(image_true, trained_model, image_size=384, BUFFER=10):
     _out_extended = np.zeros((IMAGE_SIZE + r_H, IMAGE_SIZE + r_W), dtype=out.dtype)
     _out_extended[half : half + IMAGE_SIZE, half : half + IMAGE_SIZE] = out * 255
     out = _out_extended.copy()
-    # del _out_extended
-    # gc.collect()
-    # canny = cv2.Canny(out.astype(np.uint8), 225, 255)
-    # canny = cv2.dilate(canny, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-    # contours, _ = cv2.findContours(canny, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-    # page = sorted(contours, key=cv2.contourArea, reverse=True)[0]
-    # epsilon = 0.02 * cv2.arcLength(page, True)
-    # corners = cv2.approxPolyDP(page, epsilon, True)
-    # corners = np.concatenate(corners).astype(np.float32)
-    # corners[:, 0] -= half
-    # corners[:, 1] -= half
-    # corners[:, 0] *= scale_x
-    # corners[:, 1] *= scale_y
-    # if not (np.all(corners.min(axis=0) >= (0, 0)) and np.all(corners.max(axis=0) <= (imW, imH))):
-    #     pass  # TODO: handle this
-    # corners = sorted(corners.tolist())
-    # corners = order_points(corners)
-    # destination_corners = find_dest(corners)
-    return out
+    del _out_extended
+    gc.collect()
+    canny = cv2.Canny(out.astype(np.uint8), 225, 255)
+    canny = cv2.dilate(canny, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    contours, _ = cv2.findContours(canny, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    page = sorted(contours, key=cv2.contourArea, reverse=True)[0]
+    epsilon = 0.02 * cv2.arcLength(page, True)
+    corners = cv2.approxPolyDP(page, epsilon, True)
+    corners = np.concatenate(corners).astype(np.float32)
+    corners[:, 0] -= half
+    corners[:, 1] -= half
+    corners[:, 0] *= scale_x
+    corners[:, 1] *= scale_y
+    if not (np.all(corners.min(axis=0) >= (0, 0)) and np.all(corners.max(axis=0) <= (imW, imH))):
+        pass  # TODO: handle this
+    corners = sorted(corners.tolist())
+    corners = order_points(corners)
+    destination_corners = find_dest(corners)
+    src = np.array(corners, dtype="float32")
+    dst = np.array(destination_corners, dtype="float32")
+    M = cv2.getPerspectiveTransform(src, dst)
+    maxWidth = int(max(dst[:,0]))
+    maxHeight = int(max(dst[:,1]))
+    warped = cv2.warpPerspective(image_true, M, (maxWidth, maxHeight))
+    if warped.shape[1] > warped.shape[0]:
+        warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
+    return warped
+
+def get_text(img):
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    data = pytesseract.image_to_data(img_gray, output_type=pytesseract.Output.DICT)
+    n_boxes = len(data['level'])
+    for i in range(n_boxes):
+        (x, y, w, h) = (data['left'][i], data['top'][i], data['width'][i], data['height'][i])
+        cv2.rectangle(img_gray, (x, y), (x + w, y + h), (255, 0, 0), 2)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.imshow(img_gray, cmap='gray')
+    ax.set_title("Image with Text Bounding Boxes")
+    ax.axis("off")
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    plt.close(fig)
+    buf.seek(0)
+    plot_data = base64.b64encode(buf.getvalue()).decode('utf-8')
+    txt = pytesseract.image_to_string(img_gray)
+    return txt, plot_data
 
 app = Flask(__name__)
 app.secret_key = 'secret'
@@ -96,18 +126,23 @@ HTML = '''
   <img src="{{ result_url }}" style="max-width: 500px;">
   <br><a href="{{ result_url }}" download>Download Result</a>
 {% endif %}
+{% if plot_data %}
+  <h2>Text Detection Plot:</h2>
+  <img src="data:image/png;base64,{{ plot_data }}" style="max-width: 500px;">
+{% endif %}
 {% with messages = get_flashed_messages() %}
   {% if messages %}
     <ul>{% for message in messages %}<li>{{ message }}</li>{% endfor %}</ul>
   {% endif %}
 {% endwith %}
 '''
-
+    
 import os
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     result_url = None
+    plot_data = None
     if request.method == 'POST':
         if 'file' not in request.files:
             flash('No file part')
@@ -119,18 +154,20 @@ def index():
         try:
             img = Image.open(file.stream).convert('RGB')
             img_np = np.array(img)
-            mask = scan(img_np, model)
-            mask_img = Image.fromarray(mask.astype(np.uint8))
+            cropped = scan(img_np, model)
+            text, plot_data = get_text(cropped)
+            flash(text)   
+            cropped_img = Image.fromarray(cropped.astype(np.uint8))
             buf = io.BytesIO()
-            mask_img.save(buf, format='PNG')
+            cropped_img.save(buf, format='PNG')
             buf.seek(0)
             temp_path = 'static/result.png'
             os.makedirs('static', exist_ok=True)
-            mask_img.save(temp_path)
+            cropped_img.save(temp_path)
             result_url = url_for('static', filename='result.png')
         except Exception as e:
             flash(f'Processing failed: {e}')
-    return render_template_string(HTML, result_url=result_url)
-
+    return render_template_string(HTML, result_url=result_url, plot_data=plot_data)
+   
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True)     
