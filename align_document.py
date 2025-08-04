@@ -20,14 +20,8 @@ def main():
   stacked = np.hstack([aligned, template])
 
   cv2.imshow("aligned", aligned)
-  overlay = tmp.copy()
-  overlay.resize((700,500))
-  output = aligned.copy()
-  output.resize((700,500))
-  cv2.addWeighted(overlay, 0.5, output, 0.5, 0, output)
 
   cv2.imshow("img alignment stacked", stacked)
-  cv2.imshow("img alignment overlay", output)
   cv2.waitKey(0)
  
 if __name__ == "__main__":
