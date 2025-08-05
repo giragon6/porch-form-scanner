@@ -2,5 +2,5 @@
 .ref
 **/result.png
 __pycache__
-donut_model
-trocr_model
+*_model
+.vscode/
