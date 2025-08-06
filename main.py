@@ -7,7 +7,7 @@ import io
 from PIL import Image
 import torchvision.transforms as T
 import gc
-from get_boxes import get_keyword_fields
+from get_keyword_fields import get_keyword_fields
 import csv
 
 OCRLoc = namedtuple("OCRLoc", ["id", "text", "filter_keywords"])
@@ -235,12 +235,12 @@ def index():
             try:
                 flash('Scanning image...')
                 if img_mode == 'demo':
+                    use_template=True
                     demo_img_path = 'test_img/IMG_7515_annotated_3.jpeg'
                     demo_template_path = 'test_img/template.jpeg'
                     img = Image.open(demo_img_path).convert('RGB')
                     img_np = np.array(img)
-                    if use_template:
-                        template_img = Image.open(demo_template_path).convert('RGB')
+                    template_img = Image.open(demo_template_path).convert('RGB')
                 else:
                     if 'file' not in request.files or request.files['file'].filename == '':
                         flash('Input image must be uploaded.')

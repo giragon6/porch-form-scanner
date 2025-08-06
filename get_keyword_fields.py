@@ -61,6 +61,7 @@ def get_keyword_fields(input_img, OCR_LOCATIONS):
             x2, y2 = pts[2]
             for kw, (kx1, ky1, kx2, ky2) in keyword_boxes.items():
                 margin = margin_dict.get(kw, MARGIN)
+                print(margin)
                 if x1 > kx2 and abs(y1 - ky1) < 100 and 0 < (x1 - kx2) < margin:
                     keyword_texts[kw].append((text, pts.tolist(), score))
     return keyword_texts, annotated_img
