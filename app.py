@@ -1,3 +1,4 @@
+from collections import namedtuple
 import gradio as gr
 import numpy as np
 from PIL import Image
@@ -88,6 +89,8 @@ def scan(image_true, trained_model, image_size=384):
         warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
     return warped
 
+OCRLoc = namedtuple("OCRLoc", ["id", "text", "margin"])
+
 def ocr_pipeline(input_image, ocr_fields):
     img = np.array(input_image.convert('RGB'))
     cropped = scan(img, model)
@@ -98,7 +101,7 @@ def ocr_pipeline(input_image, ocr_fields):
             text = parts[0]
             id_val = text.lower().replace(' ', '_')
             margin = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 600
-            OCR_LOCATIONS.append(type('OCRLoc', (), {})(id=id_val, text=text, margin=margin))
+            OCR_LOCATIONS.append(OCRLoc(id_val, text, margin))
     keyword_fields, annotated_img = get_keyword_fields(cropped, OCR_LOCATIONS)
     table = ""
     for kw, items in keyword_fields.items():
@@ -110,15 +113,15 @@ def ocr_pipeline(input_image, ocr_fields):
 demo = gr.Interface(
     fn=ocr_pipeline,
     inputs=[
-        gr.Image(type="pil", label="Upload Document Image"),
-        gr.Textbox(lines=4, label="OCR Fields (one per line, format: text[,margin(px)])", value="Beans\nSauce/Canned Tomatoes\nPeanut Butter,100\nOther\nPicking up for")
+        gr.Image(type="pil", label="Upload Document Image", value="./assets/demo_img.jpeg"),
+        gr.Textbox(lines=4, label="OCR Fields (one per line, format: text[,margin(px)])", value="Beans\nSauce/Canned Tomatoes\nPeanut Butter,300\nPicking up for")
     ],
     outputs=[
         gr.Image(type="pil", label="Annotated Image"),
         gr.Textbox(label="Extracted Fields")
     ],
     title="Document Scanner Demo",
-    description="Upload a document image and specify fields to extract."
+    description="Upload a document image and specify fields to extract (and, optionally, a margin in pixels -- the default is 600px). Image will be automatically flattened and aligned. Processing may take a bit, so feel free to navigate away while you wait!"
 )
 
 if __name__ == '__main__':
