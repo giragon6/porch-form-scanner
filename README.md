@@ -31,7 +31,6 @@ This document scanner aims to provide a no-frills, setup-free automatic document
 
 You can now upload your own images (or use the demo image), specify fields, and extract data from your forms!
 
----
 ## Features
 
 ### Current
@@ -42,6 +41,12 @@ You can now upload your own images (or use the demo image), specify fields, and 
 - Speed optimizations via model downscaling and image preprocessing
 - Table cell recognition
 - Support for vertically aligned labels
+
+## Screenshots
+
+![Demo Image 1 (scanned image)](static/sc-demo-1.png)
+![Demo Image 2 (annotated image)](static/sc-demo-2.png)
+![Demo Image 3 (extracted fields)](static/sc-demo-3.png)
 
 ## Attribution
 
