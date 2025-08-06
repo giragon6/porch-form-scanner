@@ -54,5 +54,3 @@ def align_images(img_unaligned, template, max_features=2000, keep_percent=0.5, r
     aligned = cv2.resize(image, (w,h))
 
     return aligned
-
-#TODO: align per box??? idk it dont work too well i fear

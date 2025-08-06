@@ -1,3 +1,4 @@
+from collections import namedtuple
 from flask import Flask, flash, redirect, request, render_template_string, url_for
 import torch
 import numpy as np
@@ -6,9 +7,17 @@ import io
 from PIL import Image
 import torchvision.transforms as T
 import gc
-from matplotlib import pyplot as plt
-import pytesseract
-import base64
+from get_boxes import get_keyword_fields
+
+OCRLoc = namedtuple("OCRLoc", ["id", "text", "filter_keywords"])
+
+DEFAULT_OCR_LOCATIONS = [
+    OCRLoc("beans", "Beans", []),
+    OCRLoc("sauce", "Sauce/Canned Tomatoes", []),
+    OCRLoc("pb", "Peanut Butter", []),
+    OCRLoc("other", "Other", []),
+    OCRLoc("pickingfor", "Picking up for", [])
+]
 
 def image_preprocess_transforms(mean=(0.4611, 0.4359, 0.3905), std=(0.2193, 0.2150, 0.2109)):
     return T.Compose([
@@ -91,34 +100,16 @@ def scan(image_true, trained_model, image_size=384, BUFFER=10):
         warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
     return warped
 
-def get_text(img):
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    data = pytesseract.image_to_data(img_gray, output_type=pytesseract.Output.DICT)
-    n_boxes = len(data['level'])
-    for i in range(n_boxes):
-        (x, y, w, h) = (data['left'][i], data['top'][i], data['width'][i], data['height'][i])
-        cv2.rectangle(img_gray, (x, y), (x + w, y + h), (255, 0, 0), 2)
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.imshow(img_gray, cmap='gray')
-    ax.set_title("Image with Text Bounding Boxes")
-    ax.axis("off")
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    plt.close(fig)
-    buf.seek(0)
-    plot_data = base64.b64encode(buf.getvalue()).decode('utf-8')
-    txt = pytesseract.image_to_string(img_gray)
-    return txt, plot_data
-
 app = Flask(__name__)
 app.secret_key = 'secret'
 
 HTML = '''
 <!doctype html>
-<title>Document Scanner Flask</title>
-<h1>Document Scanner: Semantic Segmentation using DeepLabV3-MobilenetV3</h1>
+<title>Document Scanner</title>
 <form method=post enctype=multipart/form-data>
-  <input type=file name=file accept="image/*">
+  <input type=file name=file accept="image/*"><br><br>
+  <label>Enter OCR Fields (one per line, format: id,text):</label><br>
+  <textarea name="ocr_fields" rows="6" cols="40">{{ ocr_fields_text }}</textarea><br>
   <input type=submit value=Upload>
 </form>
 {% if result_url %}
@@ -129,6 +120,15 @@ HTML = '''
 {% if plot_data %}
   <h2>Text Detection Plot:</h2>
   <img src="data:image/png;base64,{{ plot_data }}" style="max-width: 500px;">
+{% endif %}
+{% if annotated_url %}
+  <h2>Keyword Fields:</h2>
+  <img src="{{ annotated_url }}" style="max-width: 500px;">
+  <br><a href="{{ annotated_url }}" download>Download Annotated Image</a>
+{% endif %}
+{% if keyword_fields_table %}
+  <h2>Extracted Fields Table:</h2>
+  {{ keyword_fields_table|safe }}
 {% endif %}
 {% with messages = get_flashed_messages() %}
   {% if messages %}
@@ -143,6 +143,11 @@ import os
 def index():
     result_url = None
     plot_data = None
+    keyword_fields = None
+    annotated_url = None
+    keyword_fields_table = None
+    ocr_fields_text = '\n'.join([f"{loc.id},{loc.text}" for loc in DEFAULT_OCR_LOCATIONS])
+    OCR_LOCATIONS = DEFAULT_OCR_LOCATIONS
     if request.method == 'POST':
         if 'file' not in request.files:
             flash('No file part')
@@ -151,23 +156,42 @@ def index():
         if file.filename == '':
             flash('No selected file')
             return redirect(request.url)
+        ocr_fields_text = request.form.get('ocr_fields', ocr_fields_text)
+        OCR_LOCATIONS = []
+        for line in ocr_fields_text.strip().splitlines():
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) >= 2:
+                OCR_LOCATIONS.append(OCRLoc(parts[0], parts[1], []))
         try:
             img = Image.open(file.stream).convert('RGB')
             img_np = np.array(img)
             cropped = scan(img_np, model)
-            text, plot_data = get_text(cropped)
-            flash(text)   
+            template_img = img_np
+            keyword_fields, annotated_img = get_keyword_fields(cropped, template_img, OCR_LOCATIONS, align=False)
+            annotated_pil = Image.fromarray(annotated_img.astype(np.uint8))
+            buf_ann = io.BytesIO()
+            annotated_pil.save(buf_ann, format='PNG')
+            buf_ann.seek(0)  
+            temp_ann_path = 'static/annotated.png'
+            os.makedirs('static', exist_ok=True)
+            annotated_pil.save(temp_ann_path)
+            annotated_url = url_for('static', filename='annotated.png')
+            table_html = '<table border="1" cellpadding="4"><tr><th>Keyword</th><th>Extracted Text</th><th>Score</th></tr>'
+            for kw, items in keyword_fields.items():
+                for t, box, score in items:
+                    table_html += f'<tr><td>{kw}</td><td>{t}</td><td>{score:.2f}</td></tr>'
+            table_html += '</table>'
+            keyword_fields_table = table_html
             cropped_img = Image.fromarray(cropped.astype(np.uint8))
             buf = io.BytesIO()
             cropped_img.save(buf, format='PNG')
             buf.seek(0)
             temp_path = 'static/result.png'
-            os.makedirs('static', exist_ok=True)
             cropped_img.save(temp_path)
             result_url = url_for('static', filename='result.png')
         except Exception as e:
             flash(f'Processing failed: {e}')
-    return render_template_string(HTML, result_url=result_url, plot_data=plot_data)
+    return render_template_string(HTML, result_url=result_url, plot_data=plot_data, annotated_url=annotated_url, keyword_fields_table=keyword_fields_table, ocr_fields_text=ocr_fields_text)
    
 if __name__ == '__main__':
-    app.run(debug=True)     
+    app.run(debug=True)
