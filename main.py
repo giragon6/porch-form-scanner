@@ -10,13 +10,13 @@ import gc
 from get_boxes import get_keyword_fields
 import csv
 
-OCRLoc = namedtuple("OCRLoc", ["id", "text", "filter_keywords"])
+OCRLoc = namedtuple("OCRLoc", ["id", "text", "margin"])
 
 DEFAULT_OCR_LOCATIONS = [
     OCRLoc("beans", "Beans", 600),
     OCRLoc("sauce_canned_tomatoes", "Sauce/Canned Tomatoes", 600),
-    OCRLoc("peanut_butter", "Peanut Butter", 600),
-    OCRLoc("other", "Other", 600),
+    OCRLoc("peanut_butter", "Peanut Butter", 200),
+    OCRLoc("other", "Other", 1000),
     OCRLoc("picking_up_for", "Picking up for", 600)
 ]
 
@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
     {% endif %}
   </div>
   <form method=post style="margin-top:20px;" id="detect-form">
-    <p>Specify which fields should be detected. The model will attempt to find the given text field and will capture any values to the right within the given margin or 700px if no margin is specified.</p>
+    <p>Specify which fields should be detected. The model will attempt to find the given text field and will capture any values to the right within the given margin or 600px if no margin is specified.</p>
     <label>Enter OCR Fields (one per line, format: text[,margin(px)]):</label><br>
     <textarea name="ocr_fields" rows="6" cols="40">{{ ocr_fields_text }}</textarea><br>
     <input type=hidden name=action value="detect_text">
@@ -235,12 +235,12 @@ def index():
             try:
                 flash('Scanning image...')
                 if img_mode == 'demo':
+                    use_template=True
                     demo_img_path = 'test_img/IMG_7515_annotated_3.jpeg'
                     demo_template_path = 'test_img/template.jpeg'
                     img = Image.open(demo_img_path).convert('RGB')
                     img_np = np.array(img)
-                    if use_template:
-                        template_img = Image.open(demo_template_path).convert('RGB')
+                    template_img = Image.open(demo_template_path).convert('RGB')
                 else:
                     if 'file' not in request.files or request.files['file'].filename == '':
                         flash('Input image must be uploaded.')
@@ -292,11 +292,13 @@ def index():
             OCR_LOCATIONS = []
             for line in ocr_fields_text.strip().splitlines():
                 parts = [p.strip() for p in line.split(',')]
+                print(parts)
                 if len(parts) >= 1 and parts[0]:
                     text = parts[0]
                     id_val = text.lower().replace(' ', '_')
                     margin = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 600
                     OCR_LOCATIONS.append(OCRLoc(id_val, text, margin))
+                print(OCR_LOCATIONS)
             try:
                 if result_path and os.path.exists(result_path):
                     cropped_img = Image.open(result_path).convert('RGB')
