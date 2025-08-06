@@ -28,19 +28,12 @@ MARGIN = 600  # pixels to the right
 runs given image through OCR and attempts to detect adjacent (to the right) fields to provided OCR_LOCATIONS
 Args:
     img: input image -> np.ndarray
-    template_img: template image -> np.ndarray
     OCR_LOCATIONS: list of OCRLoc
-    align: whether to align input to template -> bool
 Return:
     A dict containing the keywords and adjacent fields
     The image annotated with detected text bboxes
 """
-def get_keyword_fields(img, template_img, OCR_LOCATIONS, align=True):
-    if align:
-        from align_images import align_images
-        input_img = align_images(img, template_img, debug=False)
-    else:
-        input_img = img
+def get_keyword_fields(input_img, OCR_LOCATIONS):
     result = ocr.predict(input_img)
     keyword_boxes = {}
     keyword_texts = {}
@@ -50,6 +43,7 @@ def get_keyword_fields(img, template_img, OCR_LOCATIONS, align=True):
         polys = res['dt_polys'] if 'dt_polys' in res else res['rec_polys']
         scores = res['rec_scores']
         texts = res['rec_texts'] if 'rec_texts' in res else [''] * len(polys)
+        margin_dict = {loc.text.lower(): getattr(loc, 'margin', MARGIN) for loc in OCR_LOCATIONS}
         for poly, score, text in zip(polys, scores, texts):
             pts = np.array(poly).astype(int)
             x1, y1 = pts[0]
@@ -66,6 +60,7 @@ def get_keyword_fields(img, template_img, OCR_LOCATIONS, align=True):
             x1, y1 = pts[0]
             x2, y2 = pts[2]
             for kw, (kx1, ky1, kx2, ky2) in keyword_boxes.items():
-                if x1 > kx2 and abs(y1 - ky1) < 100 and 0 < (x1 - kx2) < MARGIN:
+                margin = margin_dict.get(kw, MARGIN)
+                if x1 > kx2 and abs(y1 - ky1) < 100 and 0 < (x1 - kx2) < margin:
                     keyword_texts[kw].append((text, pts.tolist(), score))
     return keyword_texts, annotated_img
