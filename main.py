@@ -7,7 +7,7 @@ import io
 from PIL import Image
 import torchvision.transforms as T
 import gc
-from get_boxes import get_keyword_fields
+from get_keyword_fields import get_keyword_fields
 import csv
 
 OCRLoc = namedtuple("OCRLoc", ["id", "text", "margin"])
