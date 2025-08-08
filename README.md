@@ -20,13 +20,18 @@ This document scanner aims to provide a no-frills, setup-free automatic document
    ```
    pip install -r requirements.txt
    ```
+   or
+   ```
+   uv venv
+   uv pip install -r requirements.txt
+   ```
 
-3. **Run the Flask app:**
+4. **Run the Flask app:**
    ```
    python main.py
    ```
 
-4. **Visit the app:**
+5. **Visit the app:**
    - Go to [http://localhost:5000](http://localhost:5000)
 
 You can now upload your own images (or use the demo image), specify fields, and extract data from your forms!
