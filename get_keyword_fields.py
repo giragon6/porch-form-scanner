@@ -15,12 +15,19 @@ cls_model_dir = os.path.join(MODEL_DIR, 'cls')
 textline_model_dir=os.path.join(MODEL_DIR, 'textline')
 unwarp_model_dir=os.path.join(MODEL_DIR, 'unwarp')
 
-ocr = PaddleOCR(use_textline_orientation=True, lang='en',
-                text_detection_model_dir=det_model_dir,
-                text_recognition_model_dir=rec_model_dir,
-                doc_orientation_classify_model_dir=cls_model_dir,
-                textline_orientation_model_dir=textline_model_dir,
-                doc_unwarping_model_dir=unwarp_model_dir)
+try:
+    ocr = PaddleOCR(use_textline_orientation=True, lang='en',
+                    text_detection_model_dir=det_model_dir,
+                    text_recognition_model_dir=rec_model_dir,
+                    doc_orientation_classify_model_dir=cls_model_dir,
+                    textline_orientation_model_dir=textline_model_dir,
+                    doc_unwarping_model_dir=unwarp_model_dir)
+except:
+    # if dirs not found, download from paddle
+    ocr = PaddleOCR(use_textline_orientation=True, 
+                    use_doc_orientation_classify=True, 
+                    use_doc_unwarping=True, 
+                    lang='en')
 
 MARGIN = 600  # pixels to the right
 
